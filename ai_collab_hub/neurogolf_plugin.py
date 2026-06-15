@@ -654,8 +654,11 @@ def neurogolf_status(project: str, db: Session = Depends(get_db)):
             card_status = "open"; counts["open"] += 1
         tasks.append({
             "id": tid,
-            "rule_family": idx.get("rule_family") or idx.get("shape_category") or "UNKNOWN",
-            "shape": idx.get("shape") or idx.get("notes") or "VARIABLE",
+            "rule_family": (
+                idx.get("rule_family") or idx.get("shape_category")
+                or idx.get("shape_change") or "UNKNOWN"
+            ),
+            "shape": idx.get("shape") or idx.get("color_conservation") or idx.get("notes") or "VARIABLE",
             "onnx_exists": art["artifact_available"],
             "onnx_size": art["bytes"],
             "file_exists": path.exists(),

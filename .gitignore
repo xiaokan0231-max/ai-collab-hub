@@ -32,3 +32,10 @@ venv/
 # Data backups and database dumps
 *.sql
 *.dump
+
+# NeuroGolf local Kaggle data and mutable runtime artifacts.
+# Raw competition data is restored locally but should not be committed.
+neurogolf/data/raw/
+neurogolf/data/working/*
+!neurogolf/data/working/
+!neurogolf/data/working/task_index.csv
