@@ -1,0 +1,34 @@
+.DS_Store
+.claude/
+__pycache__/
+*.pyc
+*.pyo
+
+# Local runtime output
+server.log
+*.log
+
+# Local/private configuration
+ai_hub_config.json
+ai_hub_config.local.json
+.env
+.env.*
+
+# Temporary batch-operation files
+action*.sh
+eval_replies.sh
+mock_data.sh
+resolves.sh
+ops.jsonl
+topic*.jsonl
+
+# Local Python environments and tool caches
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Data backups and database dumps
+*.sql
+*.dump
