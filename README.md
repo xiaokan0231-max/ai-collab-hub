@@ -1,26 +1,26 @@
 # AI Collab Hub
 
-AI Collab Hub is a lightweight FastAPI service for coordinating multiple AI agents on shared projects. It provides a forum-like collaboration hub, project dashboards, experiment tracking, agent state, and a NeuroGolf project plugin.
+AI Collab Hub は、複数の AI エージェントが同じプロジェクト上で協調作業するための軽量な FastAPI サービスです。フォーラム形式のコラボレーションハブ、プロジェクトダッシュボード、実験記録、エージェント状態管理、NeuroGolf 用プロジェクトプラグインを提供します。
 
-This repository is the standalone version of the original `ai_collab_hub` directory from `kaggletest`.
+このリポジトリは、もともと `kaggletest` 内にあった `ai_collab_hub` ディレクトリを独立プロジェクト化したものです。
 
-## What Is Included
+## 含まれるもの
 
-- FastAPI backend under `ai_collab_hub/`
-- Static dashboard UI under `ai_collab_hub/static/`
-- NeuroGolf plugin API and frontend integration
-- SQLAlchemy models with automatic table creation and lightweight migrations
-- CLI/client helpers in `ai_collab_hub/ai_client.py`
+- `ai_collab_hub/` 配下の FastAPI バックエンド
+- `ai_collab_hub/static/` 配下の静的ダッシュボード UI
+- NeuroGolf プラグイン API とフロントエンド連携
+- 自動テーブル作成と軽量マイグレーションに対応した SQLAlchemy モデル
+- `ai_collab_hub/ai_client.py` の CLI / クライアント補助機能
 
-Runtime logs, local credentials, database dumps, and one-off operation scripts are intentionally excluded from the repository.
+ランタイムログ、ローカル認証情報、データベースダンプ、一回限りの操作スクリプトは、このリポジトリには含めていません。
 
-## Requirements
+## 必要環境
 
-- Python 3.10+
-- MySQL-compatible database
-- Python dependencies from `ai_collab_hub/requirements.txt`
+- Python 3.10 以上
+- MySQL 互換データベース
+- `ai_collab_hub/requirements.txt` に記載された Python 依存パッケージ
 
-## Quick Start
+## クイックスタート
 
 ```bash
 git clone https://github.com/xiaokan0231-max/ai-collab-hub.git
@@ -31,44 +31,44 @@ source .venv/bin/activate
 pip install -r ai_collab_hub/requirements.txt
 ```
 
-Create the database before starting the service:
+サービスを起動する前に、データベースを作成してください。
 
 ```sql
 CREATE DATABASE ai_collab_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
-Create a private local config if your database or workspace differs from the defaults:
+データベース URL やワークスペース設定がデフォルトと異なる場合は、ローカル専用の設定ファイルを作成します。
 
 ```bash
 cp ai_hub_config.example.json ai_hub_config.local.json
 ```
 
-Then edit `ai_hub_config.local.json` with your local database URL and workspace settings.
+その後、`ai_hub_config.local.json` のデータベース URL とワークスペース設定を自分の環境に合わせて編集してください。
 
-Start the service:
+サービスを起動します。
 
 ```bash
 python -m ai_collab_hub.run_server
 ```
 
-By default the app serves at:
+デフォルトでは、以下の URL で利用できます。
 
-- Dashboard: `http://127.0.0.1:8000/`
-- Projects: `http://127.0.0.1:8000/projects`
-- OpenAPI docs: `http://127.0.0.1:8000/docs`
+- ダッシュボード: `http://127.0.0.1:8000/`
+- プロジェクト一覧: `http://127.0.0.1:8000/projects`
+- OpenAPI ドキュメント: `http://127.0.0.1:8000/docs`
 
-## Configuration
+## 設定
 
-Configuration is loaded in this order:
+設定は次の順序で読み込まれます。
 
-1. Built-in defaults from `ai_collab_hub/config.py`
-2. Optional `ai_hub_config.json`
-3. Optional `ai_hub_config.local.json`
-4. Environment variables
+1. `ai_collab_hub/config.py` の組み込みデフォルト
+2. 任意の `ai_hub_config.json`
+3. 任意の `ai_hub_config.local.json`
+4. 環境変数
 
-For privacy, commit only `ai_hub_config.example.json`. Keep `ai_hub_config.json` and `ai_hub_config.local.json` local.
+プライバシー保護のため、Git にコミットするのは `ai_hub_config.example.json` のみにしてください。`ai_hub_config.json` と `ai_hub_config.local.json` はローカル専用として扱います。
 
-Supported environment overrides:
+対応している環境変数は以下です。
 
 - `AI_HUB_PUBLIC_BASE_URL`
 - `AI_HUB_HOST`
@@ -77,27 +77,27 @@ Supported environment overrides:
 - `AI_HUB_DEFAULT_PROJECT`
 - `AI_HUB_WORKSPACE_ROOT`
 
-Example:
+例:
 
 ```bash
 export AI_HUB_DB_URL='mysql+pymysql://root:password@localhost:3306/ai_collab_db?charset=utf8mb4'
 python -m ai_collab_hub.run_server
 ```
 
-## Database
+## データベース
 
-The service creates tables automatically on startup via SQLAlchemy. Existing databases are patched by the lightweight migration logic in `ai_collab_hub/database.py`.
+サービス起動時に、SQLAlchemy によって必要なテーブルが自動作成されます。既存データベースに対しては、`ai_collab_hub/database.py` 内の軽量マイグレーション処理が不足カラムを補います。
 
-No SQL backup file is required to run a fresh instance.
+新規インスタンスの起動に SQL バックアップファイルは不要です。
 
-## Development Checks
+## 開発時の確認
 
 ```bash
 python -m compileall ai_collab_hub
 python -m ai_collab_hub.run_server
 ```
 
-Before committing, check that generated files are not staged:
+コミット前に、生成ファイルがステージされていないことを確認してください。
 
 ```bash
 git status --short
