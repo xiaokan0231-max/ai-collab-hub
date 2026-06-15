@@ -1,7 +1,14 @@
 import os
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey, Text, Boolean, UniqueConstraint, inspect, text
+from sqlalchemy import (create_engine, Column, Integer, String, Float, DateTime,
+                        ForeignKey, Text, Boolean, UniqueConstraint, inspect,
+                        text, LargeBinary)
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from datetime import datetime
+try:
+    from sqlalchemy.dialects.mysql import LONGBLOB
+    ARTIFACT_BLOB_TYPE = LONGBLOB()
+except Exception:
+    ARTIFACT_BLOB_TYPE = LargeBinary(length=16 * 1024 * 1024)
 try:
     from .config import load_config
 except ImportError:
@@ -164,6 +171,13 @@ class NeuroGolfArtifact(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+class NeuroGolfArtifactBlob(Base):
+    __tablename__ = "neurogolf_artifact_blobs"
+    sha256 = Column(String(64), primary_key=True)
+    bytes = Column(Integer, nullable=False)
+    content = Column(ARTIFACT_BLOB_TYPE, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 class KaggleSubmission(Base):
     __tablename__ = "kaggle_submissions"
     id = Column(Integer, primary_key=True, index=True)
@@ -253,5 +267,17 @@ def _migrate(engine):
         for col, ddl in expected_cols.items():
             if artifact_cols and col not in artifact_cols:
                 conn.execute(text(f"ALTER TABLE neurogolf_artifacts ADD COLUMN {col} {ddl}"))
+
+        if insp.has_table("neurogolf_artifact_blobs"):
+            blob_cols = {c["name"] for c in insp.get_columns("neurogolf_artifact_blobs")}
+            expected_blob_cols = {
+                "sha256": "VARCHAR(64) NOT NULL",
+                "bytes": "INT NOT NULL",
+                "content": "LONGBLOB NOT NULL",
+                "created_at": "DATETIME NULL",
+            }
+            for col, ddl in expected_blob_cols.items():
+                if col not in blob_cols:
+                    conn.execute(text(f"ALTER TABLE neurogolf_artifact_blobs ADD COLUMN {col} {ddl}"))
 
 _migrate(engine)

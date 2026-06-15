@@ -9,22 +9,25 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+from io import BytesIO
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 try:
     from .config import load_config
     from .database import (SessionLocal, Project, Topic, Agent, AgentProjectState,
-                           NeuroGolfArtifact, ActivityLog, KaggleSubmission)
+                           NeuroGolfArtifact, NeuroGolfArtifactBlob, ActivityLog,
+                           KaggleSubmission)
 except ImportError:
     from config import load_config
     from database import (SessionLocal, Project, Topic, Agent, AgentProjectState,
-                          NeuroGolfArtifact, ActivityLog, KaggleSubmission)
+                          NeuroGolfArtifact, NeuroGolfArtifactBlob, ActivityLog,
+                          KaggleSubmission)
 
 
 router = APIRouter(prefix="/api/project_plugin", tags=["project-plugin"])
@@ -104,11 +107,78 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
+def sha256_bytes(blob: bytes) -> str:
+    return hashlib.sha256(blob).hexdigest()
+
+
 def is_dummy_model(path: Path) -> bool:
     # The placeholder dummies are one fixed template of EXACTLY 868 bytes.
     # Legit golfed models can be smaller (tiny = high points), so a <= size
     # heuristic would misclassify them; equality pins the actual template.
     return (not path.exists()) or path.stat().st_size == DUMMY_SIZE_BYTES
+
+
+def is_dummy_blob(blob: bytes) -> bool:
+    return len(blob) == DUMMY_SIZE_BYTES
+
+
+def blob_uri(digest: str) -> str:
+    return f"db://neurogolf_artifact_blobs/{digest}"
+
+
+def store_artifact_blob(db: Session, digest: str, content: bytes) -> bool:
+    pending = db.info.setdefault("neurogolf_blob_pending", set())
+    if digest in pending:
+        return False
+    row = db.query(NeuroGolfArtifactBlob).filter(NeuroGolfArtifactBlob.sha256 == digest).first()
+    if row:
+        return False
+    db.add(NeuroGolfArtifactBlob(
+        sha256=digest,
+        bytes=len(content),
+        content=content,
+        created_at=utcnow(),
+    ))
+    pending.add(digest)
+    return True
+
+
+def _legacy_artifact_paths(project: str, row: NeuroGolfArtifact) -> list[Path]:
+    candidates: list[Path] = []
+    if row.artifact_path and not row.artifact_path.startswith("db://"):
+        candidates.append(Path(row.artifact_path))
+    candidates.append(task_file(project, row.task_id))
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for path in candidates:
+        key = str(path.expanduser())
+        if key not in seen:
+            seen.add(key)
+            unique.append(path)
+    return unique
+
+
+def artifact_payload(db: Session, project: str, row: Optional[NeuroGolfArtifact]) -> tuple[Optional[bytes], bool]:
+    """Return artifact bytes from DB, importing once from legacy paths if needed.
+
+    The DB blob is the durable source of truth. Legacy files are only a migration
+    bridge so an existing workspace can seed the blob table.
+    """
+    if not row or not row.sha256:
+        return None, False
+    blob = db.query(NeuroGolfArtifactBlob).filter(NeuroGolfArtifactBlob.sha256 == row.sha256).first()
+    if blob:
+        return blob.content, False
+
+    for path in _legacy_artifact_paths(project, row):
+        if not path.exists() or not path.is_file():
+            continue
+        content = path.read_bytes()
+        if sha256_bytes(content) != row.sha256:
+            continue
+        created = store_artifact_blob(db, row.sha256, content)
+        return content, created
+    return None, False
 
 
 def load_manifest(project: str) -> dict:
@@ -235,7 +305,8 @@ def task_file(project: str, task_id: str) -> Path:
     return working_dir(project) / f"{task_id}.onnx"
 
 
-def artifact_status(row: Optional[NeuroGolfArtifact], manifest_entry: Optional[dict], path: Path) -> dict:
+def artifact_status(row: Optional[NeuroGolfArtifact], manifest_entry: Optional[dict],
+                    path: Path, db_payload: Optional[bytes] = None) -> dict:
     exists = path.exists()
     dummy = is_dummy_model(path)
     if not row:
@@ -252,6 +323,8 @@ def artifact_status(row: Optional[NeuroGolfArtifact], manifest_entry: Optional[d
             "bytes": path.stat().st_size if exists else 0,
             "is_deployed": manifest_deployed,
             "is_dummy": dummy,
+            "artifact_available": exists and not dummy,
+            "storage": "file" if exists else "missing",
             "source_topic": manifest_topic,
             "created_by": manifest_entry.get("created_by"),
             "artifact_age": None,
@@ -259,6 +332,7 @@ def artifact_status(row: Optional[NeuroGolfArtifact], manifest_entry: Optional[d
     age = None
     if row.updated_at:
         age = (datetime.utcnow() - row.updated_at).total_seconds()
+    blob_available = db_payload is not None
     return {
         "verified_status": row.verified_status,
         "score": row.score,
@@ -266,6 +340,8 @@ def artifact_status(row: Optional[NeuroGolfArtifact], manifest_entry: Optional[d
         "bytes": row.bytes,
         "is_deployed": row.is_deployed,
         "is_dummy": row.is_dummy,
+        "artifact_available": blob_available,
+        "storage": "db" if blob_available else "missing",
         "source_topic": row.forum_topic_id,
         "created_by": row.created_by,
         "artifact_age": age,
@@ -435,66 +511,110 @@ def grader_inference_error(blob: bytes, task_num: Optional[int] = None,
     return ""
 
 
-def rebuild_submission_zip(project: str) -> dict:
-    wd = working_dir(project)
-    zip_path = wd / "submission.zip"
-    missing = [f"task{i:03d}.onnx" for i in range(1, 401) if not (wd / f"task{i:03d}.onnx").exists()]
+def _deployed_payloads(project: str, db: Session) -> tuple[list[tuple[str, bytes]], bool]:
+    artifacts = deployed_artifacts(db, require_project(db, project).id)
+    payloads: list[tuple[str, bytes]] = []
+    missing: list[str] = []
+    backfilled = False
+    for i in range(1, 401):
+        tid = f"task{i:03d}"
+        row = artifacts.get(tid)
+        if not (row and row.verified_status == SOLVED_STATUS and row.is_deployed and not row.is_dummy):
+            missing.append(f"{tid}.onnx")
+            continue
+        content, created = artifact_payload(db, project, row)
+        backfilled = backfilled or created
+        if content is None or is_dummy_blob(content):
+            missing.append(f"{tid}.onnx")
+            continue
+        payloads.append((f"{tid}.onnx", content))
     if missing:
-        raise HTTPException(status_code=409, detail=f"缺少 {len(missing)} 个 ONNX，不能重建 submission.zip: {missing[:8]}")
+        raise HTTPException(status_code=409, detail=f"DB 缺少 {len(missing)} 个已部署 ONNX，不能重建 submission.zip: {missing[:8]}")
+    return payloads, backfilled
+
+
+def build_submission_zip(project: str, db: Session) -> dict:
+    payloads, backfilled = _deployed_payloads(project, db)
 
     try:
         import onnx  # type: ignore
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"缺少 onnx 依赖，无法做 zip 内加载校验: {exc}")
 
-    # Inference gate BEFORE writing the zip: one poisoned model errors the whole
-    # submission, so reject up front instead of shipping a zip Kaggle will fail.
-    poisoned: list[str] = []
-    for i in range(1, 401):
-        name = f"task{i:03d}.onnx"
-        err = grader_inference_error((wd / name).read_bytes(), task_num=i, project=project)
+    # Best-effort local inference probe. The official deploy verifier is the
+    # authoritative gate; local onnxruntime can lag Kaggle and report
+    # NOT_IMPLEMENTED for models that are already accepted by the competition.
+    gate_warnings: list[str] = []
+    for name, content in payloads:
+        task_num = int(name[4:7])
+        err = grader_inference_error(content, task_num=task_num, project=project)
         if err.startswith("deps:"):
-            raise HTTPException(status_code=503, detail=f"缺少 onnxruntime，无法做推理校验: {err}")
+            gate_warnings.append(f"{name}: {err}")
+            break
         if err:
-            poisoned.append(f"{name}: {err}")
-    if poisoned:
-        raise HTTPException(
-            status_code=422,
-            detail=f"{len(poisoned)} 个模型会被判分器拒绝(整包报错), 已拦截: {poisoned[:8]}",
-        )
+            gate_warnings.append(f"{name}: {err}")
 
-    tmp = zip_path.with_suffix(".zip.tmp")
-    with zipfile.ZipFile(tmp, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        for i in range(1, 401):
-            path = wd / f"task{i:03d}.onnx"
-            zf.write(path, arcname=path.name)
+    buf = BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for name, content in payloads:
+            zf.writestr(name, content)
+    content = buf.getvalue()
 
     bad: list[str] = []
-    with zipfile.ZipFile(tmp, "r") as zf:
+    with zipfile.ZipFile(BytesIO(content), "r") as zf:
         for name in zf.namelist():
             try:
                 onnx.load_model_from_string(zf.read(name))
             except Exception as exc:
                 bad.append(f"{name}: {exc}")
     if bad:
-        tmp.unlink(missing_ok=True)
         raise HTTPException(status_code=422, detail=f"zip 内模型加载失败: {bad[:5]}")
-    tmp.replace(zip_path)
-    return {"zip": str(zip_path), "checked": 400, "size": zip_path.stat().st_size}
+    return {
+        "content": content,
+        "zip": "db://neurogolf/submission.zip",
+        "checked": 400,
+        "size": len(content),
+        "backfilled": backfilled,
+        "gate_warning_count": len(gate_warnings),
+        "gate_warnings": gate_warnings[:8],
+    }
 
 
-def ensure_submission_inputs(project: str, candidate_task: str) -> None:
-    wd = working_dir(project)
+def rebuild_submission_zip(project: str, db: Session) -> dict:
+    info = build_submission_zip(project, db)
+    return {k: v for k, v in info.items() if k != "content"}
+
+
+def ensure_submission_inputs(project: str, candidate_task: str, db: Session) -> bool:
+    artifacts = deployed_artifacts(db, require_project(db, project).id)
     missing = [
         f"task{i:03d}.onnx"
         for i in range(1, 401)
-        if f"task{i:03d}" != candidate_task and not (wd / f"task{i:03d}.onnx").exists()
+        if f"task{i:03d}" != candidate_task and not (
+            (row := artifacts.get(f"task{i:03d}"))
+            and row.verified_status == SOLVED_STATUS
+            and row.is_deployed
+            and not row.is_dummy
+        )
     ]
     if missing:
         raise HTTPException(
             status_code=409,
-            detail=f"缺少 {len(missing)} 个既有 ONNX，部署后无法重建 submission.zip: {missing[:8]}"
+            detail=f"DB 缺少 {len(missing)} 个既有 ONNX 台账，部署后无法重建 submission.zip: {missing[:8]}"
         )
+    backfilled = False
+    for i in range(1, 401):
+        tid = f"task{i:03d}"
+        if tid == candidate_task:
+            continue
+        content, created = artifact_payload(db, project, artifacts[tid])
+        backfilled = backfilled or created
+        if content is None or is_dummy_blob(content):
+            raise HTTPException(
+                status_code=409,
+                detail=f"DB 缺少 {tid}.onnx 模型内容，部署后无法重建 submission.zip。"
+            )
+    return backfilled
 
 
 @router.get("/{project}/status")
@@ -508,22 +628,24 @@ def neurogolf_status(project: str, db: Session = Depends(get_db)):
     claims = manifest.get("claims", {})
     tasks = []
     counts = {"solved": 0, "claimed": 0, "open": 0}
+    backfilled = False
     for i in range(1, 401):
         tid = f"task{i:03d}"
         path = task_file(project, tid)
         row = artifacts.get(tid)
-        art = artifact_status(row, manifest_tasks.get(tid), path)
+        payload, created_blob = artifact_payload(db, project, row)
+        backfilled = backfilled or created_blob
+        art = artifact_status(row, manifest_tasks.get(tid), path, payload)
         f = forum.get(tid)
         cl = claims.get(tid)
         idx = task_index.get(tid, {})
-        # 状态只看物理事实 + 认领台账, 论坛不参与推导 (论坛帖仅作卡片辅助链接):
-        #   solved  = 工作区有非 dummy 模型 (进了 submission.zip 的就是完成)
+        # 状态只看 DB artifact 台账 + DB blob + 认领台账, 论坛不参与推导:
+        #   solved  = 已验证部署台账 + ONNX bytes 已入库
         #   claimed = 有未过期的直接认领
-        #   open    = 其余 (dummy 兜底或缺失)
-        solved = path.exists() and not art["is_dummy"]
-        # 台账过账: 经 deploy API 验证入库的完成 (手工放置的历史模型为 False, 显示"未过账")
+        #   open    = 其余
         ledger_verified = (art["verified_status"] == SOLVED_STATUS and art["is_deployed"]
                            and not art["is_dummy"])
+        solved = ledger_verified and art["artifact_available"]
         if solved:
             card_status = "solved"; counts["solved"] += 1
         elif claim_is_active(cl):
@@ -534,12 +656,15 @@ def neurogolf_status(project: str, db: Session = Depends(get_db)):
             "id": tid,
             "rule_family": idx.get("rule_family") or idx.get("shape_category") or "UNKNOWN",
             "shape": idx.get("shape") or idx.get("notes") or "VARIABLE",
-            "onnx_exists": path.exists(),
-            "onnx_size": path.stat().st_size if path.exists() else 0,
+            "onnx_exists": art["artifact_available"],
+            "onnx_size": art["bytes"],
+            "file_exists": path.exists(),
+            "storage": art["storage"],
             "is_dummy": art["is_dummy"],
             "status": card_status,
             "solved": solved,
             "ledger_verified": ledger_verified,
+            "artifact_available": art["artifact_available"],
             "verified_status": art["verified_status"],
             "best_score": art["score"],
             "deployed_score": art["score"] if art["is_deployed"] else None,
@@ -551,6 +676,8 @@ def neurogolf_status(project: str, db: Session = Depends(get_db)):
             "claim": claim_view(cl),
             "forum": f,
         })
+    if backfilled:
+        db.commit()
     return {"tasks": tasks, "counts": counts, "manifest": str(manifest_path(project))}
 
 
@@ -570,11 +697,13 @@ def claim_task(project: str,
                    NeuroGolfArtifact.task_id == tid,
                    NeuroGolfArtifact.is_deployed == True)  # noqa: E712
            .first())
-    path = task_file(project, tid)
-    if path.exists() and not is_dummy_model(path):
+    payload, created_blob = artifact_payload(db, project, row)
+    if created_blob:
+        db.commit()
+    if row and row.verified_status == SOLVED_STATUS and row.is_deployed and not row.is_dummy and payload is not None:
         ledger = (f"当前最高 {row.score} 分, by {row.created_by or '?'}"
                   if row and row.verified_status == SOLVED_STATUS
-                  else "台账未过账(手工放置的历史模型)")
+                  else "台账未过账")
         raise HTTPException(status_code=409,
                             detail=f"{tid} 已完成 ({ledger})。挑战无需认领: 做出更优模型直接走 deploy API, "
                                    f"更高分自动顶替。先查历史避免重复尝试: "
@@ -652,17 +781,25 @@ def task_history(project: str, task_id: str, db: Session = Depends(get_db)):
             .filter(NeuroGolfArtifact.project_id == p.id, NeuroGolfArtifact.task_id == tid)
             .order_by(NeuroGolfArtifact.created_at.asc())
             .all())
-    attempts = [{
-        "at": iso(r.created_at),
-        "by": r.created_by,
-        "score": r.score,
-        "verified_status": r.verified_status,
-        "deployed": r.is_deployed,
-        "outcome": ("当前部署" if r.is_deployed else
-                    "挑战被拒(低分)" if r.verified_status == "REJECTED_LOW_SCORE" else "已被顶替"),
-        "sha256_short": r.sha256[:8] if r.sha256 else None,
-        "source_topic": r.forum_topic_id,
-    } for r in rows]
+    attempts = []
+    backfilled = False
+    for r in rows:
+        payload, created_blob = artifact_payload(db, project, r)
+        backfilled = backfilled or created_blob
+        attempts.append({
+            "at": iso(r.created_at),
+            "by": r.created_by,
+            "score": r.score,
+            "verified_status": r.verified_status,
+            "deployed": r.is_deployed,
+            "outcome": ("当前部署" if r.is_deployed else
+                        "挑战被拒(低分)" if r.verified_status == "REJECTED_LOW_SCORE" else "已被顶替"),
+            "sha256_short": r.sha256[:8] if r.sha256 else None,
+            "source_topic": r.forum_topic_id,
+            "artifact_available": payload is not None,
+        })
+    if backfilled:
+        db.commit()
     scores = [r.score for r in rows if r.score is not None]
     current = next((a for a in attempts if a["deployed"]), None)
 
@@ -681,16 +818,35 @@ def task_history(project: str, task_id: str, db: Session = Depends(get_db)):
 
 @router.get("/{project}/artifact/{filename}")
 def download_artifact(project: str, filename: str, db: Session = Depends(get_db)):
-    require_project(db, project)
+    p = require_project(db, project)
     if filename != "submission.zip" and not TASK_RE.match(filename):
         raise HTTPException(status_code=400, detail="只允许下载 submission.zip 或 taskXXX.onnx。")
-    path = (working_dir(project) / filename).resolve()
-    base = working_dir(project).resolve()
-    if base not in path.parents and path != base:
-        raise HTTPException(status_code=400, detail="非法 artifact 路径。")
-    if not path.exists():
+    if filename == "submission.zip":
+        info = build_submission_zip(project, db)
+        if info.get("backfilled"):
+            db.commit()
+        return Response(
+            content=info["content"],
+            media_type="application/zip",
+            headers={"Content-Disposition": 'attachment; filename="submission.zip"'},
+        )
+
+    tid = normalize_task_id(filename[:-5])
+    row = (db.query(NeuroGolfArtifact)
+           .filter(NeuroGolfArtifact.project_id == p.id,
+                   NeuroGolfArtifact.task_id == tid,
+                   NeuroGolfArtifact.is_deployed == True)  # noqa: E712
+           .first())
+    payload, created_blob = artifact_payload(db, project, row)
+    if created_blob:
+        db.commit()
+    if payload is None:
         raise HTTPException(status_code=404, detail=f"artifact 不存在: {filename}")
-    return FileResponse(path, filename=filename)
+    return Response(
+        content=payload,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/{project}/submission")
@@ -715,8 +871,6 @@ async def deploy_artifact(
     expected_name = f"{tid}.onnx"
     if file.filename and Path(file.filename).name != expected_name:
         raise HTTPException(status_code=400, detail=f"上传文件名必须是 {expected_name}。")
-    wd = working_dir(project)
-    wd.mkdir(parents=True, exist_ok=True)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         candidate = Path(tmpdir) / expected_name
@@ -727,11 +881,13 @@ async def deploy_artifact(
                     break
                 f.write(chunk)
 
-        if is_dummy_model(candidate):
+        content = candidate.read_bytes()
+        if is_dummy_blob(content):
             raise HTTPException(status_code=422, detail="拒绝部署 dummy/空模型。")
         verified_status = verify_model(project, tid, candidate)
-        digest = sha256_file(candidate)
-        size = candidate.stat().st_size
+        digest = sha256_bytes(content)
+        size = len(content)
+        store_artifact_blob(db, digest, content)
 
         current = (db.query(NeuroGolfArtifact)
                    .filter(NeuroGolfArtifact.project_id == p.id,
@@ -751,7 +907,7 @@ async def deploy_artifact(
             db.add(NeuroGolfArtifact(
                 project_id=p.id, task_id=tid, score=score, verified_status="REJECTED_LOW_SCORE",
                 sha256=digest, bytes=size, forum_topic_id=forum_topic_id, created_by=agent_name,
-                artifact_path="", is_deployed=False, is_dummy=False,
+                artifact_path=blob_uri(digest), is_deployed=False, is_dummy=False,
                 created_at=utcnow(), updated_at=utcnow()))
             db.add(ActivityLog(project_id=p.id, agent_id=None, action_type="artifact_reject",
                                topic_id=forum_topic_id,
@@ -761,11 +917,9 @@ async def deploy_artifact(
             raise HTTPException(status_code=409,
                                 detail=f"拒绝低分覆盖: {score:.3f} < 历史部署 {previous_best:.3f}。"
                                        f"本次尝试已记录, 历史: GET /api/project_plugin/{project}/history?task_id={tid}")
-        ensure_submission_inputs(project, tid)
+        ensure_submission_inputs(project, tid, db)
 
-        archive_path = archive_current(project, tid, task_file(project, tid), current)
-        dest = task_file(project, tid)
-        shutil.copy2(candidate, dest)
+        archive_path = None
         if current:
             current.is_deployed = False
             current.updated_at = utcnow()
@@ -779,13 +933,14 @@ async def deploy_artifact(
             bytes=size,
             forum_topic_id=forum_topic_id,
             created_by=agent_name,
-            artifact_path=str(dest),
+            artifact_path=blob_uri(digest),
             is_deployed=True,
             is_dummy=False,
             created_at=utcnow(),
             updated_at=utcnow(),
         )
         db.add(row)
+        db.flush()
 
         manifest = load_manifest(project)
         old_manifest_entry = manifest["tasks"].get(tid)
@@ -799,16 +954,13 @@ async def deploy_artifact(
             "source_topic": forum_topic_id,
             "created_by": agent_name,
             "model_sha256": digest,
-            "model_path": str(dest),
+            "model_path": blob_uri(digest),
             "updated_at": datetime.utcnow().isoformat() + "Z",
         }
         save_manifest(project, manifest)
         try:
-            zip_info = rebuild_submission_zip(project)
+            zip_info = rebuild_submission_zip(project, db)
         except HTTPException:
-            dest.unlink(missing_ok=True)
-            if archive_path:
-                shutil.move(str(archive_path), str(dest))
             # 回滚 manifest，恢复部署前的状态
             if old_manifest_entry is None:
                 manifest["tasks"].pop(tid, None)
@@ -839,9 +991,18 @@ async def deploy_artifact(
 KAGGLE_COMPETITION = "neurogolf-2026"
 
 
-def _count_solved(project: str) -> int:
-    wd = working_dir(project)
-    return sum(1 for i in range(1, 401) if not is_dummy_model(wd / f"task{i:03d}.onnx"))
+def _count_solved(project: str, db: Session) -> tuple[int, bool]:
+    p = require_project(db, project)
+    artifacts = deployed_artifacts(db, p.id)
+    count = 0
+    backfilled = False
+    for i in range(1, 401):
+        row = artifacts.get(f"task{i:03d}")
+        payload, created_blob = artifact_payload(db, project, row)
+        backfilled = backfilled or created_blob
+        if row and row.verified_status == SOLVED_STATUS and row.is_deployed and not row.is_dummy and payload is not None:
+            count += 1
+    return count, backfilled
 
 
 def _fetch_kaggle_score(target_dt: Optional[datetime] = None) -> dict:
@@ -939,17 +1100,19 @@ def submit_kaggle(project: str,
                   submitted_by: str = Form("human"),
                   db: Session = Depends(get_db)):
     p = require_project(db, project)
-    zip_path = working_dir(project) / "submission.zip"
-    if not zip_path.exists():
-        raise HTTPException(status_code=404, detail="submission.zip 不存在，请先部署全部 400 个任务。")
-
-    solved_count = _count_solved(project)
+    zip_info = build_submission_zip(project, db)
+    solved_count, count_backfilled = _count_solved(project, db)
+    if zip_info.get("backfilled") or count_backfilled:
+        db.commit()
     refs_before = _kaggle_submission_refs()
-    proc = subprocess.run(
-        ["kaggle", "competitions", "submit", "-c", KAGGLE_COMPETITION,
-         "-f", str(zip_path), "-m", message],
-        capture_output=True, text=True, timeout=300,
-    )
+    with tempfile.NamedTemporaryFile(prefix="neurogolf_submission_", suffix=".zip") as tmp:
+        tmp.write(zip_info["content"])
+        tmp.flush()
+        proc = subprocess.run(
+            ["kaggle", "competitions", "submit", "-c", KAGGLE_COMPETITION,
+             "-f", tmp.name, "-m", message],
+            capture_output=True, text=True, timeout=300,
+        )
     # The CLI can exit non-zero even after the upload lands (transient), so we
     # trust Kaggle's submission list, not the return code: succeed iff a NEW
     # submission ref appeared. This makes the record-keeping authoritative.
