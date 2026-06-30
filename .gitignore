@@ -39,3 +39,9 @@ neurogolf/data/raw/
 neurogolf/data/working/*
 !neurogolf/data/working/
 !neurogolf/data/working/task_index.csv
+
+# NeuroGolf Codex local model artifacts. ONNX models and submission bundles
+# are DB-backed (db://neurogolf_artifact_blobs); only the generator/verify
+# scripts are tracked, not the generated binaries.
+neurogolf_codex/**/*.onnx
+neurogolf_codex/**/*.zip

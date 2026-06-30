@@ -1,0 +1,643 @@
+[
+  {
+    "task": "task192",
+    "ready": true,
+    "points": 14.142,
+    "bytes": 2089,
+    "nodes": 17,
+    "ops": [
+      "ArgMax",
+      "Cast",
+      "Concat",
+      "Conv",
+      "ConvTranspose",
+      "Equal",
+      "Greater",
+      "Mul",
+      "ReduceSum",
+      "Slice",
+      "Sub"
+    ],
+    "poison": false
+  },
+  {
+    "task": "task288",
+    "ready": true,
+    "points": 14.633,
+    "bytes": 5948,
+    "nodes": 54,
+    "ops": [
+      "Cast",
+      "Concat",
+      "Conv",
+      "CumSum",
+      "Equal",
+      "Greater",
+      "Mul",
+      "Pad",
+      "ReduceMax",
+      "ReduceSum",
+      "Slice",
+      "Sub",
+      "Sum",
+      "Where"
+    ],
+    "poison": false
+  },
+  {
+    "task": "task161",
+    "ready": true,
+    "points": 14.67,
+    "bytes": 2998,
+    "nodes": 46,
+    "ops": [
+      "And",
+      "ArgMax",
+      "Cast",
+      "Equal",
+      "Gather",
+      "Greater",
+      "Max",
+      "Mul",
+      "Not",
+      "Or",
+      "ReduceMax",
+      "ReduceSum",
+      "Reshape",
+      "Where"
+    ],
+    "poison": false
+  },
+  {
+    "task": "task154",
+    "ready": true,
+    "points": 14.673,
+    "bytes": 4963,
+    "nodes": 46,
+    "ops": [
+      "Add",
+      "Cast",
+      "Concat",
+      "Conv",
+      "Greater",
+      "Less",
+      "MatMul",
+      "Mul",
+      "OneHot",
+      "ReduceMax",
+      "ReduceMin",
+      "Slice",
+      "Squeeze",
+      "Sub",
+      "Where"
+    ],
+    "poison": false
+  },
+  {
+    "task": "task368",
+    "ready": true,
+    "points": 14.69,
+    "bytes": 3406,
+    "nodes": 77,
+    "ops": [
+      "Abs",
+      "Add",
+      "ArgMax",
+      "Cast",
+      "Concat",
+      "Less",
+      "MatMul",
+      "Mul",
+      "Pad",
+      "ReduceMax",
+      "ReduceSum",
+      "Reshape",
+      "Slice",
+      "Sub",
+      "Transpose"
+    ],
+    "poison": false
+  },
+  {
+    "task": "task206",
+    "ready": true,
+    "points": 15.025,
+    "bytes": 3168,
+    "nodes": 41,
+    "ops": [
+      "Add",
+      "And",
+      "ArgMax",
+      "Cast",
+      "Concat",
+      "Equal",
+      "Greater",
+      "Not",
+      "Or",
+      "Pad",
+      "ReduceMax",
+      "ReduceMin",
+      "ReduceSum",
+      "Reshape",
+      "Slice",
+      "Sub",
+      "Where"
+    ],
+    "poison": false
+  },
+  {
+    "task": "task212",
+    "ready": true,
+    "points": 15.972,
+    "bytes": 5951,
+    "nodes": 47,
+    "ops": [
+      "And",
+      "Cast",
+      "Concat",
+      "CumSum",
+      "Equal",
+      "Greater",
+      "MaxPool",
+      "Mul",
+      "Pad",
+      "ReduceSum",
+      "Slice",
+      "Sub",
+      "Sum",
+      "Where"
+    ],
+    "poison": false
+  },
+  {
+    "task": "task040",
+    "ready": true,
+    "points": 16.029,
+    "bytes": 4167,
+    "nodes": 36,
+    "ops": [
+      "And",
+      "ArgMax",
+      "Cast",
+      "Equal",
+      "Less",
+      "Pad",
+      "ReduceMax",
+      "ReduceMin",
+      "Slice",
+      "Sub",
+      "Where"
+    ],
+    "poison": false
+  },
+  {
+    "task": "task302",
+    "ready": true,
+    "points": 16.039,
+    "bytes": 4372,
+    "nodes": 43,
+    "ops": [
+      "And",
+      "Cast",
+      "Concat",
+      "MaxPool",
+      "Not",
+      "Or",
+      "Pad",
+      "Slice"
+    ],
+    "poison": false
+  },
+  {
+    "task": "task369",
+    "ready": true,
+    "points": 16.073,
+    "bytes": 3315,
+    "nodes": 27,
+    "ops": [
+      "Cast",
+      "Concat",
+      "Conv",
+      "Min",
+      "Mul",
+      "Pad",
+      "Relu",
+      "Slice",
+      "Sub",
+      "Sum"
+    ],
+    "poison": false
+  },
+  {
+    "task": "task007",
+    "ready": true,
+    "points": 16.108,
+    "bytes": 1258,
+    "nodes": 13,
+    "ops": [
+      "ArgMax",
+      "Concat",
+      "OneHot",
+      "Pad",
+      "ReduceMax",
+      "Reshape",
+      "Slice",
+      "Tile",
+      "Unsqueeze"
+    ],
+    "poison": false
+  },
+  {
+    "task": "task348",
+    "ready": true,
+    "points": 16.117,
+    "bytes": 1950,
+    "nodes": 28,
+    "ops": [
+      "Abs",
+      "And",
+      "Concat",
+      "Div",
+      "Floor",
+      "Greater",
+      "GreaterOrEqual",
+      "Less",
+      "Mul",
+      "Not",
+      "Or",
+      "Pad",
+      "ReduceMax",
+      "ReduceSum",
+      "Slice",
+      "Sub"
+    ],
+    "poison": false
+  },
+  {
+    "task": "task105",
+    "ready": true,
+    "points": 16.139,
+    "bytes": 8053,
+    "nodes": 63,
+    "ops": [
+      "And",
+      "Cast",
+      "Concat",
+      "Greater",
+      "MaxPool",
+      "Not",
+      "Or",
+      "Pad",
+      "ReduceMax",
+      "ReduceSum",
+      "Slice"
+    ],
+    "poison": false
+  },
+  {
+    "task": "task030",
+    "ready": true,
+    "points": 16.278,
+    "bytes": 3134,
+    "nodes": 37,
+    "ops": [
+      "Cast",
+      "Concat",
+      "Equal",
+      "MatMul",
+      "Pad",
+      "ReduceMax",
+      "ReduceMin",
+      "Slice",
+      "Sub",
+      "Sum",
+      "Where"
+    ],
+    "poison": false
+  },
+  {
+    "task": "task273",
+    "ready": true,
+    "points": 16.311,
+    "bytes": 1670,
+    "nodes": 21,
+    "ops": [
+      "And",
+      "CumSum",
+      "Equal",
+      "Greater",
+      "LessOrEqual",
+      "Mul",
+      "Pad",
+      "Slice",
+      "Sum",
+      "Where"
+    ],
+    "poison": false
+  },
+  {
+    "task": "task353",
+    "ready": true,
+    "points": 16.404,
+    "bytes": 3244,
+    "nodes": 31,
+    "ops": [
+      "And",
+      "Cast",
+      "Concat",
+      "Equal",
+      "Mul",
+      "Pad",
+      "ReduceSum",
+      "Sign",
+      "Slice",
+      "Sub",
+      "Sum",
+      "Xor"
+    ],
+    "poison": false
+  },
+  {
+    "task": "task356",
+    "ready": true,
+    "points": 16.483,
+    "bytes": 2324,
+    "nodes": 21,
+    "ops": [
+      "And",
+      "Cast",
+      "Concat",
+      "CumSum",
+      "Not",
+      "Or",
+      "Pad",
+      "ReduceSum",
+      "Slice",
+      "Sub"
+    ],
+    "poison": false
+  },
+  {
+    "task": "task136",
+    "ready": true,
+    "points": 16.516,
+    "bytes": 2827,
+    "nodes": 25,
+    "ops": [
+      "And",
+      "Cast",
+      "Concat",
+      "Conv",
+      "Not",
+      "Or",
+      "Pad",
+      "Slice"
+    ],
+    "poison": false
+  },
+  {
+    "task": "task226",
+    "ready": true,
+    "points": 16.532,
+    "bytes": 4625,
+    "nodes": 39,
+    "ops": [
+      "Cast",
+      "Concat",
+      "CumSum",
+      "Equal",
+      "Greater",
+      "Mul",
+      "Pad",
+      "ReduceSum",
+      "Slice",
+      "Sub",
+      "Sum",
+      "Where"
+    ],
+    "poison": false
+  },
+  {
+    "task": "task160",
+    "ready": true,
+    "points": 16.569,
+    "bytes": 2171,
+    "nodes": 19,
+    "ops": [
+      "And",
+      "Cast",
+      "Concat",
+      "Conv",
+      "ConvTranspose",
+      "Greater",
+      "Not",
+      "Or",
+      "Pad",
+      "Slice"
+    ],
+    "poison": false
+  },
+  {
+    "task": "task305",
+    "ready": true,
+    "points": 16.718,
+    "bytes": 1865,
+    "nodes": 6,
+    "ops": [
+      "Equal",
+      "Mod",
+      "Mul",
+      "Pad",
+      "ReduceMax"
+    ],
+    "poison": false
+  },
+  {
+    "task": "task262",
+    "ready": true,
+    "points": 16.765,
+    "bytes": 903,
+    "nodes": 8,
+    "ops": [
+      "ArgMax",
+      "Expand",
+      "Gather",
+      "OneHot",
+      "Pad",
+      "Slice",
+      "Squeeze",
+      "Unsqueeze"
+    ],
+    "poison": false
+  },
+  {
+    "task": "task139",
+    "ready": true,
+    "points": 16.803,
+    "bytes": 3865,
+    "nodes": 33,
+    "ops": [
+      "And",
+      "Concat",
+      "Greater",
+      "Not",
+      "Or",
+      "Pad",
+      "Slice"
+    ],
+    "poison": false
+  },
+  {
+    "task": "task099",
+    "ready": true,
+    "points": 16.837,
+    "bytes": 14222,
+    "nodes": 1,
+    "ops": [
+      "Conv"
+    ],
+    "poison": false
+  },
+  {
+    "task": "task381",
+    "ready": true,
+    "points": 16.841,
+    "bytes": 2624,
+    "nodes": 23,
+    "ops": [
+      "And",
+      "Cast",
+      "Concat",
+      "MaxPool",
+      "Not",
+      "Or",
+      "Pad",
+      "ReduceMax",
+      "Slice"
+    ],
+    "poison": false
+  },
+  {
+    "task": "task032",
+    "ready": true,
+    "points": 16.867,
+    "bytes": 2347,
+    "nodes": 19,
+    "ops": [
+      "Cast",
+      "Conv",
+      "CumSum",
+      "Equal",
+      "Greater",
+      "Mul",
+      "Pad",
+      "ReduceSum",
+      "ScatterElements",
+      "Sign",
+      "Slice",
+      "Sqrt",
+      "Sub",
+      "Sum",
+      "Where"
+    ],
+    "poison": false
+  },
+  {
+    "task": "task122",
+    "ready": true,
+    "points": 17.172,
+    "bytes": 10236,
+    "nodes": 1,
+    "ops": [
+      "Conv"
+    ],
+    "poison": false
+  },
+  {
+    "task": "task081",
+    "ready": true,
+    "points": 17.256,
+    "bytes": 3749,
+    "nodes": 35,
+    "ops": [
+      "And",
+      "Concat",
+      "Greater",
+      "Not",
+      "Or",
+      "Pad",
+      "Slice"
+    ],
+    "poison": false
+  },
+  {
+    "task": "task299",
+    "ready": true,
+    "points": 17.558,
+    "bytes": 1405,
+    "nodes": 21,
+    "ops": [
+      "And",
+      "Cast",
+      "Concat",
+      "Not",
+      "Or",
+      "Pad",
+      "ReduceMax",
+      "Slice"
+    ],
+    "poison": false
+  },
+  {
+    "task": "task389",
+    "ready": true,
+    "points": 17.68,
+    "bytes": 6222,
+    "nodes": 1,
+    "ops": [
+      "Conv"
+    ],
+    "poison": false
+  },
+  {
+    "task": "task229",
+    "ready": true,
+    "points": 17.749,
+    "bytes": 1379,
+    "nodes": 14,
+    "ops": [
+      "ArgMax",
+      "Cast",
+      "Equal",
+      "Mul",
+      "Pad",
+      "ReduceSum",
+      "Reshape",
+      "Slice",
+      "Sub",
+      "Sum",
+      "Where"
+    ],
+    "poison": false
+  },
+  {
+    "task": "task052",
+    "ready": true,
+    "points": 17.887,
+    "bytes": 986,
+    "nodes": 11,
+    "ops": [
+      "Cast",
+      "Equal",
+      "Mul",
+      "Pad",
+      "ReduceMax",
+      "ReduceSum",
+      "Slice",
+      "Sub",
+      "Sum",
+      "Where"
+    ],
+    "poison": false
+  }
+]
